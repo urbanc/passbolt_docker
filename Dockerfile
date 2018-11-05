@@ -1,4 +1,5 @@
-FROM php:7-fpm
+ARG PHP_BASE_IMAGE=php:7-fpm
+FROM $PHP_BASE_IMAGE
 
 LABEL maintainer="diego@passbolt.com"
 

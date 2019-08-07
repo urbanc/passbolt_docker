@@ -55,7 +55,7 @@ $ docker run --name passbolt \
              -e DATASOURCES_DEFAULT_USERNAME=<mariadb_user> \
              -e DATASOURCES_DEFAULT_DATABASE=<mariadb_database> \
              -e APP_FULL_BASE_URL=https://mydomain.com \
-             passbolt/passbolt:develop-debian
+             passbolt/passbolt:latest-pro-debian
 ```
 
 Once the container is running create your first admin user:

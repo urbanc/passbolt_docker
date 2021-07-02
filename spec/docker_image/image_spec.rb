@@ -8,30 +8,29 @@ describe 'Dockerfile' do
       'DATASOURCES_DEFAULT_PASSWORD' => 'P4ssb0lt',
       'DATASOURCES_DEFAULT_USERNAME' => 'passbolt',
       'DATASOURCES_DEFAULT_DATABASE' => 'passbolt',
-      'PASSBOLT_GPG_KEYRING'         => '/var/lib/nginx/.gnupg'
+      'PASSBOLT_GPG_KEYRING'         => '/var/lib/passbolt/.gnupg'
     }
 
-    @image = Docker::Image.build_from_dir(ROOT_DOCKERFILES)
+    @image = Docker::Image.build_from_dir(ROOT_DOCKERFILES, { 'dockerfile' => $dockerfile })
     set :docker_image, @image.id
     set :docker_container_create_options, { 'Cmd' => '/bin/sh' }
   end
 
   let(:nginx_conf)      { '/etc/nginx/nginx.conf' }
-  let(:php_conf)        { '/usr/local/etc/php-fpm.d/expose.conf' }
-  let(:site_conf)       { '/etc/nginx/conf.d/default.conf' }
+  let(:php_conf)        { '/etc/php/7.3/fpm/php.ini' }
+  let(:site_conf)       { '/etc/nginx/sites-enabled/nginx-passbolt.conf' }
   let(:supervisor_conf) do
     [ '/etc/supervisor/conf.d/nginx.conf',
     '/etc/supervisor/conf.d/php.conf',
     '/etc/supervisor/conf.d/cron.conf' ]
   end
-  let(:passbolt_home)   { '/var/www/passbolt' }
-  let(:passbolt_tmp)    { '/var/www/passbolt/tmp' }
-  let(:passbolt_image)  { '/var/www/passbolt/webroot/img/public' }
+  let(:passbolt_home)   { '/usr/share/php/passbolt' }
+  let(:passbolt_tmp)    { '/var/lib/passbolt/tmp' }
+  let(:passbolt_image)  { "#{passbolt_home}/webroot/img/public" }
   let(:passbolt_owner)  { 'www-data' }
-  let(:exposed_ports)   { [ '80', '443' ] }
-  let(:composer)        { '/usr/local/bin/composer'}
+  let(:exposed_ports)   { [ $http_port, $https_port ] }
   let(:php_extensions)  { [
-    'curl', 'gd', 'intl', 'json', 'mcrypt', 'mysqlnd', 'xsl', 'phar',
+    'gd', 'intl', 'json', 'mysqlnd', 'xsl', 'phar',
     'posix', 'xml', 'zlib', 'ctype', 'pdo', 'gnupg', 'pdo_mysql'
     ] }
   let(:wait_for) { '/usr/bin/wait-for.sh' }
@@ -41,12 +40,6 @@ describe 'Dockerfile' do
       php_extensions.each do |ext|
         expect(command("php --ri #{ext}").exit_status).to eq 0
       end
-    end
-  end
-
-  describe 'php composer' do
-    it 'is not installed' do
-      expect(file(composer)).to_not exist
     end
   end
 
@@ -60,6 +53,10 @@ describe 'Dockerfile' do
         expect(file(config)).to exist
       end
     end
+  end
+
+  describe file($cron_service) do
+    it { should exist and be_executable }
   end
 
   describe 'wait-for' do
@@ -76,17 +73,17 @@ describe 'Dockerfile' do
     end
 
     it 'must be owned by correct user' do
-      expect(file(passbolt_home)).to be_owned_by(passbolt_owner)
+      expect(file(passbolt_home)).to be_owned_by('root')
       expect(file(passbolt_tmp)).to be_owned_by(passbolt_owner)
       expect(file(passbolt_image)).to be_owned_by(passbolt_owner)
     end
 
     it 'must have the correct permissions on tmp' do
-      expect(file(passbolt_tmp)).to be_mode('775')
+      expect(file(passbolt_tmp)).to be_mode('755')
     end
 
     it 'must have the correct permissions on img' do
-      expect(file(passbolt_image)).to be_mode('775')
+      expect(file(passbolt_image)).to be_mode('755')
     end
   end
 
@@ -96,7 +93,7 @@ describe 'Dockerfile' do
     end
 
     it 'does not expose php version' do
-      expect(file(php_conf).content).to match(/^php_flag\[expose_php\]\s+=\s+off$/)
+      expect(file(php_conf).content).to match(/^expose_php\s+=\s+Off$/)
     end
   end
 
@@ -106,7 +103,7 @@ describe 'Dockerfile' do
     end
 
     it 'has the correct permissions' do
-      expect(file(nginx_conf)).to be_owned_by 'root'
+      expect(file(nginx_conf)).to be_owned_by $root_user
     end
   end
 
@@ -116,15 +113,11 @@ describe 'Dockerfile' do
     end
 
     it 'has the correct permissions' do
-      expect(file(site_conf)).to be_owned_by 'root'
+      expect(file(site_conf)).to be_owned_by $root_user
     end
 
     it 'points to the correct root folder' do
-      expect(file(site_conf).content).to match 'root /var/www/passbolt/webroot'
-    end
-
-    it 'has server tokens off' do
-      expect(file(nginx_conf).content).to match(/^\s+server_tokens off;/)
+      expect(file(site_conf).content).to match "root #{passbolt_home}/webroot"
     end
   end
 

@@ -24,7 +24,7 @@ describe 'passbolt_api service' do
       sleep 1
     end
 
-    @image     = Docker::Image.build_from_dir(ROOT_DOCKERFILES)
+    @image = Docker::Image.build_from_dir(ROOT_DOCKERFILES, { 'dockerfile' => $dockerfile })
     @container = Docker::Container.create(
       'Env' => [
         "DATASOURCES_DEFAULT_HOST=#{@mysql.json['NetworkSettings']['IPAddress']}",
@@ -48,15 +48,11 @@ describe 'passbolt_api service' do
 
   let(:passbolt_host)     { @container.json['NetworkSettings']['IPAddress'] }
   let(:uri)               { "/healthcheck/status.json" }
-  let(:curl)              { "curl -sk -o /dev/null -w '%{http_code}' -H 'Host: passbolt.local' https://#{passbolt_host}/#{uri}" }
+  let(:curl)              { "curl -sk -o /dev/null -w '%{http_code}' -H 'Host: passbolt.local' https://#{passbolt_host}:#{$https_port}/#{uri}" }
 
   describe 'php service' do
     it 'is running supervised' do
       expect(service('php-fpm')).to be_running.under('supervisor')
-    end
-
-    it 'has its port open' do
-      expect(@container.json['Config']['ExposedPorts']).to have_key('9000/tcp')
     end
   end
 
@@ -71,12 +67,12 @@ describe 'passbolt_api service' do
       expect(service('nginx')).to be_running.under('supervisor')
     end
 
-    it 'is listening on port 80' do
-      expect(@container.json['Config']['ExposedPorts']).to have_key('80/tcp')
+    it "is listening on port #{$http_port}" do
+      expect(@container.json['Config']['ExposedPorts']).to have_key("#{$http_port}/tcp")
     end
 
-    it 'is listening on port 443' do
-      expect(@container.json['Config']['ExposedPorts']).to have_key('443/tcp')
+    it "is listening on port #{$https_port}" do
+      expect(@container.json['Config']['ExposedPorts']).to have_key("#{$https_port}/tcp")
     end
   end
 
@@ -86,41 +82,21 @@ describe 'passbolt_api service' do
     end
   end
 
-  describe 'passbolt serverkey unaccessible' do
-    let(:uri) { '/config/gpg/serverkey.asc' }
-    it "returns 404" do
-      expect(command(curl).stdout).to eq '404'
-    end
-  end
-
-  describe 'passbolt serverkey private unaccessible' do
-    let(:uri) { '/config/gpg/serverkey_private.asc' }
-    it 'returns 404' do
-      expect(command(curl).stdout).to eq '404'
-    end
-  end
-
-  describe 'passbolt conf unaccessible' do
-    let(:uri) { '/config/app.php' }
-    it 'returns 404' do
-      expect(command(curl).stdout).to eq '404'
-    end
-  end
-  describe 'passbolt tmp folder is unaccessible' do
-    let(:uri) { '/tmp/cache/database/empty' }
+  describe 'can not access outside webroot' do
+    let(:uri) { '/vendor/autoload.php' }
     it 'returns 404' do
       expect(command(curl).stdout).to eq '404'
     end
   end
 
   describe 'hide information' do
-    let(:curl) { "curl -Isk -H 'Host: passbolt.local' https://#{passbolt_host}/" }
+    let(:curl) { "curl -Isk -H 'Host: passbolt.local' https://#{passbolt_host}:#{$https_port}/" }
     it 'hides php version' do
       expect(command("#{curl} | grep 'X-Powered-By: PHP'").stdout).to be_empty
     end
 
     it 'hides nginx version' do
-      expect(command("#{curl} | grep 'Server:'").stdout.strip).to match(/^Server:\s+nginx$/)
+      expect(command("#{curl} | grep 'server:'").stdout.strip).to match(/^server:\s+nginx.*$/)
     end
   end
 
